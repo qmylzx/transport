@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//ibatis.apache.org//DTD Mapper 3.0//EN"
+        "http://ibatis.apache.org/dtd/ibatis-3-mapper.dtd">
+
+<mapper namespace="com.whxl.transport.dao.IBatchDao">
+    <resultMap id="BatchInfo" type="com.whxl.transport.pojo.BatchInfo">
+        <id column="id" property="id"/>
+        <result column="device_type" property="deviceType"/>
+        <result column="execute_user" property="executeUser"/>
+        <result column="execute_date" property="executeDate"/>
+        <result column="comments" property="comments"/>
+    </resultMap>
+
+
+    <insert id="insertFile" useGeneratedKeys="true" keyProperty="id">
+        insert into import_history(device_type,execute_user,execute_date,comments)
+        value (#{deviceType},#{executeUser},#{executeDate},#{comments})
+    </insert>
+
+
+    <select id="selectBatchInfos" resultMap="BatchInfo">
+        select * from import_history
+    </select>
+</mapper>
+
+

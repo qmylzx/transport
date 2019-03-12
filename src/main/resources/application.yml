@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://db:3306/whxlbdai?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=GMT&allowMultiQueries=true
+    username: root
+    password: bdaipass
+    type: org.apache.commons.dbcp.BasicDataSource
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 3000MB
+      max-request-size: 3000MB
+#公共配置与profiles选择无关  bdaipass  db
+mybatis:
+  mapperLocations: classpath:mapper/*.xml
+  type-aliases-package: com.whxl.transport.pojo
+
+#Tomcat配置
+server:
+  port: 8080
+  tomcat:
+    uri-encoding: UTF-8
+logging:
+  level:
+    com:
+      whxl:
+        transport: info
+
+

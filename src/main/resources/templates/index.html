@@ -1,0 +1,44 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="/jquery-3.3.1.js"></script>
+</head>
+<body>
+<h2>Hello World!</h2>
+<form id="file_form">
+    <input type="file" name="file"/>
+    <input type="text" id="description" name="description" aria-placeholder="请数输入文件描述"/>
+    <button type="button" onclick="submitFunction()">提交</button>
+</form>
+</body>
+<a href="/test">rmdb</a>
+<script>
+    function submitFunction() {
+        //这里唯一需要注意的就是这个form-add的id
+        var formData = new FormData($("#file_form")[0]);
+        $.ajax({
+            //接口地址
+            url: '/fileUpload',
+            type: 'POST',
+            data: formData,
+            async: false,
+            cache: false,
+            contentType: false,
+            processData: false,
+            success: function (data) {
+                //成功的回调
+                if (data.code == "000000") {
+                    alert(data.message);
+                } else {
+                    alert(data.message);
+                }
+            },
+            error: function (returndata) {
+                //请求异常的回调
+                // modals.warn("网络访问失败，请稍后重试!");
+            }
+        });
+    }
+</script>
+</html>
