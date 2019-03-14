@@ -10,7 +10,6 @@ import org.apache.commons.logging.LogFactory;
 import java.io.IOException;
 
 
-
 public class DatabaseLazyTask implements Runnable {
     private final Log logger = LogFactory.getLog(getClass());
     private long batchId;
@@ -22,11 +21,11 @@ public class DatabaseLazyTask implements Runnable {
     private String pwd;
     private String ip;
     private String port;
-    private String code ="40020";
-
+    private String code = "40020";
+    private String deviceId;
 
     public DatabaseLazyTask(long batchId, String deviceType, String mappings, String dbName, String tableName,
-                            String username, String pwd, String ip, String port) {
+                            String username, String pwd, String ip, String port, String deviceId) {
         this.batchId = batchId;
         this.deviceType = deviceType;
         this.mappings = mappings;
@@ -36,7 +35,7 @@ public class DatabaseLazyTask implements Runnable {
         this.pwd = pwd;
         this.ip = ip;
         this.port = port;
-
+        this.deviceId = deviceId;
     }
 
 
@@ -45,7 +44,7 @@ public class DatabaseLazyTask implements Runnable {
         try {
             logger.debug("开始上传文件到hdfs");
             FileUtils.dataBaseUpload(batchId, deviceType,
-                    mappings, dbName, tableName,username,pwd,ip,port);
+                    mappings, dbName, tableName, username, pwd, ip, port,deviceId);
             code = "40021"; //成功执行
             logger.debug("成功！");
         } catch (Exception e) {//异常
@@ -62,8 +61,8 @@ public class DatabaseLazyTask implements Runnable {
                 logger.debug("自定义异常!");
                 code = ((EtlException) e).getCode();
             }
-        }finally {
-            logger.debug("任务状态 : \n"+toString());
+        } finally {
+            logger.debug("任务状态 : \n" + toString());
         }
     }
 
@@ -107,9 +106,13 @@ public class DatabaseLazyTask implements Runnable {
         return code;
     }
 
+    public String getDeviceId() {
+        return deviceId;
+    }
+
     @Override
     public String toString() {
-        return "batchId:" + getBatchId()  + "\ndeviceType = "
+        return "batchId:" + getBatchId() + "\ndeviceType = "
                 + getDeviceType() + "\nmappings = " + getMappings()
                 + "\ndbName = " + getDbName()
                 + "\ntableName = " + getTableName()
@@ -117,7 +120,8 @@ public class DatabaseLazyTask implements Runnable {
                 + "\npwd = " + getPwd()
                 + "\nip = " + getIp()
                 + "\nport = " + getPort()
-                + "\ncode = " + getCode();
+                + "\ncode = " + getCode()
+                + "\ndeviceId = " + getDeviceId();
     }
 
 }

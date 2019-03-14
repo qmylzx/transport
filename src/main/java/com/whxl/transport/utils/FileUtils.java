@@ -17,29 +17,33 @@ public class FileUtils {
     private final static Log logger = LogFactory.getLog(FileUtils.class);
 
     public static void dataBaseUpload(long batchId, String deviceType, String mappings, String dbName,
-                                      String tableName,String username, String pwd,String ip, String port)
+                                      String tableName, String username, String pwd, String ip, String port,String deviceId)
             throws JSchException, IOException, EtlException {
         //{ deviceid1 : "column1", deviceid2 : "column2" }
         logger.debug("dataBaseUpload start");
         SshUtil sshUtil = SshUtil.getSshUtil();
         sshUtil.getConnection();
         logger.debug("解析Mappings ....");
-        Set<Map.Entry<String, Object>> keys = null;
+        Set<Map.Entry<String, Object>> keys ;
         try {
             keys = JSON.parseObject(mappings).entrySet();
+            if(keys.size()==0){
+                throw new EtlException("40007");
+            }
         } catch (Exception e) {
             throw new EtlException("40007");
         }
         logger.debug("Mappings : " + keys.toString());
-        sshUtil.executeCommand(analysisMapping(deviceType, batchId, keys, dbName, tableName,username,
-                pwd,ip,port));
+
+        sshUtil.executeCommand(analysisMapping(deviceType, batchId, keys, dbName, tableName, username,
+                pwd, ip, port,deviceId));
 
         //建表
         StringBuilder sb = new StringBuilder();
         sb.append("source /etc/profile\n hive -e \"CREATE DATABASE IF NOT EXISTS etl;USE etl;");
-        sb.append("CREATE external TABLE IF NOT EXISTS "); //
+        sb.append("CREATE external TABLE IF NOT EXISTS t"); //
         sb.append(deviceType);
-        sb.append("2");
+        sb.append("_2");
         sb.append("(");
         int i = 1;
 
@@ -52,6 +56,7 @@ public class FileUtils {
                 i++;
             }
         }
+        sb.append(", deviceid  string");
         sb.append(")PARTITIONED BY( batchid string) row format delimited fields terminated by '\t'");
         sb.append("location '/result1/");
         sb.append(deviceType);
@@ -60,9 +65,9 @@ public class FileUtils {
         sb.append(deviceType);
         sb.append("/");
         sb.append(batchId);
-        sb.append("' into table ");
+        sb.append("' into table t");
         sb.append(deviceType);
-        sb.append("2");
+        sb.append("_2");
         sb.append(" PARTITION(batchid=");
         sb.append(batchId);
         sb.append(");\"");
@@ -72,14 +77,168 @@ public class FileUtils {
         logger.debug("load to database success!");
     }
 
+    //
+    public static void uploadFile(String path, String deviceType, long batchId,
+                                  String filename, String mappings,String deviceId) throws JSchException,
+            IOException, SftpException, EtlException {
+        logger.debug("FileUtils uploadFile");
+        SshUtil sshUtil = SshUtil.getSshUtil();
+        sshUtil.getConnection();
+        sshUtil.upLoad(path, "/home", deviceType, batchId);  //   /home/deviceType/batchId
+        logger.debug("FileUtils uploadFile to linux success ");
+        sshUtil.executeCommand(analysisMapping(mappings, deviceType, batchId, filename,deviceId));
+        sshUtil.close();
+        logger.debug("uploadFile success!");
+    }
+
+    public static void stream(String mappings, String deviceType,String deviceId) throws EtlException, JSchException, IOException {
+        StringBuilder sb;
+        try {
+            logger.debug("file 开始建hive表...\n开始解析mappings ：" + mappings + "\ndeviceType : "
+                    + deviceType + " , deviceId : " + deviceId);
+            JSONObject jsonObject = JSON.parseObject(mappings);
+            Set<String> keys = jsonObject.keySet();
+            if(keys.size()==0){
+                throw new EtlException("40007");
+            }
+            String[] res = new String[keys.size()+1];
+            keys.forEach(k -> {
+                        res[Integer.parseInt(jsonObject.get(k).toString()) - 1] = k;
+                    }
+            );
+            res[Integer.parseInt(deviceId)-1] = "deviceId";
+
+
+            logger.debug("解析mappings eg:{ deviceId1: row, deviceId2: row}");
+            sb = new StringBuilder();
+            sb.append("source /etc/profile\nhive -e \"CREATE DATABASE IF NOT EXISTS etl;\nUSE etl;\n");
+            sb.append("CREATE external TABLE IF NOT EXISTS t");
+            sb.append(deviceType);
+            sb.append("_3");
+            sb.append("(\n");
+            for (int i = 0, j = 1; i < res.length; i++) {
+                if("deviceId".equals(res[i])){
+                    sb.append(" deviceId");
+                    sb.append(" string");
+                }else {
+                    sb.append(" v");
+                    sb.append(res[i]);
+                    sb.append(" string");
+                }
+                if (j < res.length) {
+                    j++;
+                    sb.append(",\n");
+                }
+            }
+            sb.append(")row format delimited fields terminated by ','\n");
+            sb.append("location '/result2/");
+            sb.append(deviceType);
+            sb.append("';\"\nhadoop fs -mkdir  /result2\nhadoop fs -mkdir  /result2/");
+            sb.append(deviceType);
+            sb.append("\nhadoop fs -touchz  /result2/");
+            sb.append(deviceType);
+            sb.append("/");
+            sb.append("data.csv");
+        } catch (Exception e) {
+            throw new EtlException("40007");
+        }
+        SshUtil sshUtil = SshUtil.getSshUtil();
+        sshUtil.getConnection();
+        sshUtil.executeCommand(sb.toString());
+        sshUtil.close();
+    }
+
+    public static void removeBatchFile(Long batchId, String deviceType)throws JSchException, IOException {
+        //  hdfs api  delete   批次唯一  搜索 result  result1  result2
+        logger.debug("start removeBatchFile batchid = "+batchId+",deviceType = "+deviceType);
+        SshUtil sshUtil = SshUtil.getSshUtil();
+        sshUtil.getConnection();
+        StringBuilder sb = new StringBuilder();
+        sb.append("source /etc/profile\nhadoop fs -rm -r /result");
+        sb.append("/");
+        sb.append(deviceType);
+        sb.append("/batchid=");
+        sb.append(batchId);
+        sb.append("\nhadoop fs -rm -r /result1");
+        sb.append("/");
+        sb.append(deviceType);
+        sb.append("/batchid=");
+        sb.append(batchId);
+        sshUtil.executeCommand(sb.toString());
+        sshUtil.close();
+        logger.debug("RemoveBatchFile success!");
+    }
+
+
+    //file import
+    private static String analysisMapping(String mappings, String deviceType, long batchId, String filename,String deviceId) throws EtlException {
+        StringBuilder sb;
+        try {
+            logger.debug("file 开始建hive表...\n开始解析mappings ：" + mappings + "\ndeviceType : "
+                    + deviceType + "\nbatchId: " + batchId + "\nfilename : " + filename + " , deviceId : " + deviceId);
+            JSONObject jsonObject = JSON.parseObject(mappings);
+
+            Set<String> keys = jsonObject.keySet();
+            if(keys.size()==0){
+                throw new EtlException("40007");
+            }
+            String[] res = new String[keys.size()+1];
+            keys.forEach(k -> {
+                        res[Integer.parseInt(jsonObject.get(k).toString()) - 1] = k;
+                    }
+            );
+            res[Integer.parseInt(deviceId)-1] = "deviceId";
+
+            logger.debug("解析mappings eg:{ deviceId1: row, deviceId2: row}");
+            sb = new StringBuilder();
+            sb.append("source /etc/profile\nhive -e \"CREATE DATABASE IF NOT EXISTS etl;\nUSE etl;\n");
+            sb.append("CREATE external TABLE IF NOT EXISTS t");
+            sb.append(deviceType);
+            sb.append("_1");
+            sb.append("(\n");
+            for (int i = 0, j = 1; i < res.length; i++) {
+                if("deviceId".equals(res[i])){
+                    sb.append(" deviceid");
+                    sb.append(" string");
+                }else {
+                    sb.append(" v");
+                    sb.append(res[i]);
+                    sb.append(" string");
+                }
+                if (j < res.length) {
+                    j++;
+                    sb.append(",\n");
+                }
+            }
+            sb.append(")PARTITIONED BY( batchid string)\nrow format delimited fields terminated by ','\n");
+            sb.append("location '/result/");
+            sb.append(deviceType);
+            sb.append("';\n");
+            sb.append("load data local inpath '/home/");
+            sb.append(deviceType);
+            sb.append("/");
+            sb.append(batchId);
+            sb.append("/");
+            sb.append(filename);
+            sb.append("' into table t");
+            sb.append(deviceType);
+            sb.append("_1");
+            sb.append("\nPARTITION(batchid=");
+            sb.append(batchId);
+            sb.append(");\"");
+        } catch (Exception e) {
+            throw new EtlException("40007");
+        }
+        return sb.toString();
+    }
 
     // db import
     private static String analysisMapping(String deviceType, long batchId,
                                           Set<Map.Entry<String, Object>> keys, String dbName, String tableName
-            ,String username, String pwd,String ip, String port) {
+            , String username, String pwd, String ip, String port,String deviceId) {
         logger.debug("db analysisMapping : " + " , deviceType:" +
                 deviceType + " , batchId : " + batchId + " , dbName:" + dbName + " , tableName:" + tableName
-                + " , username:"+username+" , pwd : "+pwd+" , ip : "+ip+" , port : "+port);
+                + " , username:" + username + " , pwd : " + pwd + " , ip : " + ip + " , port : " + port + " , deviceId : " + deviceId);
         StringBuilder sb = new StringBuilder();
         sb.append("source /etc/profile\nsqoop import ");
         sb.append("--connect jdbc:mysql://");
@@ -105,6 +264,10 @@ public class FileUtils {
                 i++;
             }
         }
+        sb.append(",");
+        sb.append(deviceId);
+        sb.append(" as deviceid");
+
         sb.append(" from ");
         sb.append(tableName);
         sb.append(" where $CONDITIONS' ");
@@ -120,128 +283,6 @@ public class FileUtils {
         sb.append("--fields-terminated-by '\t'");
         return sb.toString();
     }
-
-
-
-
-
-    //
-    public static void uploadFile(String path, String deviceType, long batchId,
-                                  String filename, String mappings) throws JSchException,
-            IOException, SftpException, EtlException {
-        logger.debug("FileUtils uploadFile");
-        SshUtil sshUtil = SshUtil.getSshUtil();
-        sshUtil.getConnection();
-        sshUtil.upLoad(path, "/home", deviceType, batchId);  //   /home/deviceType/batchId
-        logger.debug("FileUtils uploadFile to linux success ");
-        sshUtil.executeCommand(analysisMapping(mappings, deviceType, batchId, filename));
-        sshUtil.close();
-        logger.debug("uploadFile success!");
-    }
-
-
-
-    //file import
-    private static String analysisMapping(String mappings, String deviceType, long batchId, String filename) throws EtlException {
-        StringBuilder sb = null;
-        try {
-            logger.debug("file 开始建hive表...\n开始解析mappings ：" + mappings + "\ndeviceType : "
-                    + deviceType + "\nbatchId: " + batchId + "\nfilename : " + filename);
-            JSONObject jsonObject = JSON.parseObject(mappings);
-            Set<String> keys = jsonObject.keySet();
-            String[] res = new String[keys.size()];
-            keys.forEach(k -> {
-                        res[Integer.parseInt(jsonObject.get(k).toString()) - 1] = k;
-                    }
-            );
-            logger.debug("解析mappings eg:{ deviceId1: row, deviceId2: row}");
-            sb = new StringBuilder();
-            sb.append("source /etc/profile\nhive -e \"CREATE DATABASE IF NOT EXISTS etl;\nUSE etl;\n");
-            sb.append("CREATE external TABLE IF NOT EXISTS ");
-            sb.append(deviceType);
-            sb.append("1");
-            sb.append("(\n");
-            for (int i = 0, j = 1; i < res.length; i++) {
-                sb.append("v");
-                sb.append(res[i]);
-                sb.append(" string");
-                if (j < res.length) {
-                    j++;
-                    sb.append(",\n");
-                }
-            }
-            sb.append(")PARTITIONED BY( batchid string)\nrow format delimited fields terminated by ','\n");
-            sb.append("location '/result/");
-            sb.append(deviceType);
-            sb.append("';\n");
-            sb.append("load data local inpath '/home/");
-            sb.append(deviceType);
-            sb.append("/");
-            sb.append(batchId);
-            sb.append("/");
-            sb.append(filename);
-            sb.append("' into table ");
-            sb.append(deviceType);
-            sb.append("1");
-            sb.append("\nPARTITION(batchid=");
-            sb.append(batchId);
-            sb.append(");\"");
-        } catch (Exception e) {
-            throw new EtlException("40007");
-        }
-        return sb.toString();
-    }
-
-
-
-    public static  void stream(String mappings,String deviceType)throws EtlException,IOException,JSchException{
-        logger.debug("解析mappings，建表...");
-        StringBuilder sb = null;
-        try {
-            JSONObject jsonObject = JSON.parseObject(mappings);
-            Set<String> keys = jsonObject.keySet();
-            String[] res = new String[keys.size()];
-            keys.forEach(k -> {
-                        res[Integer.parseInt(jsonObject.get(k).toString()) - 1] = k;
-                    }
-            );
-            logger.debug("解析mappings eg:{ deviceId1: row, deviceId2: row}");
-            sb = new StringBuilder();
-            sb.append("source /etc/profile\nhive -e \"CREATE DATABASE IF NOT EXISTS etl;\nUSE etl;\n");
-            sb.append("CREATE external TABLE IF NOT EXISTS ");
-            sb.append(deviceType);
-            sb.append("3");
-            sb.append("(\n");
-            for (int i = 0, j = 1; i < res.length;) {
-                sb.append("v");
-                sb.append(res[i]);
-                sb.append(" string");
-                if (j < res.length) {
-                    j++;
-                    sb.append(",\n");
-                }
-                i++;
-            }
-            sb.append(")PARTITIONED BY( batchid string)\nrow format delimited fields terminated by ','\n");
-            sb.append("location '/result2/");
-            sb.append(deviceType);
-            sb.append("';\"");
-        } catch (Exception e) {
-            throw new EtlException("40007");
-        }
-        SshUtil sshUtil = SshUtil.getSshUtil();
-        sshUtil.getConnection();
-        sshUtil.executeCommand(sb.toString());
-        sshUtil.close();
-    }
-    /*
-create table customers (id string, name string, email string, street_address string, company string)
-partitioned by (time string)
-clustered by (id) into 5 buckets stored as orc
-location '/user/bedrock/salescust'
-TBLPROPERTIES ('transactional'='true');
-
-    */
 
 
 }
@@ -292,5 +333,4 @@ location '/result/deviceType'
 load data local inpath '/home/deviceType/21/user_info.csv' overwrite into table deviceType PARTITION(batchid=21);
 
 SELECT * FROM deviceType WHERE batchid>= '21'  and v1 is not null;;
-
 */

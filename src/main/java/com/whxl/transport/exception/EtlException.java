@@ -20,8 +20,10 @@ code
 40020  任务处理中
 40021  任务完成
 40022  任务为空
-40023  加载配置失败
+40023  加载配置失败或数据导入hdfs失败
 40024  流数据导入停止
+
+40030  记录不存在
 
 */
 public class EtlException extends Exception{

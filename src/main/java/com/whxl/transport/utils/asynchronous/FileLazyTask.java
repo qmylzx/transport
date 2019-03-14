@@ -11,8 +11,7 @@ import org.apache.commons.logging.LogFactory;
 import java.io.IOException;
 
 
-
-public class FileLazyTask implements Runnable{
+public class FileLazyTask implements Runnable {
 
     private final Log logger = LogFactory.getLog(getClass());
     private long batchId;
@@ -20,23 +19,24 @@ public class FileLazyTask implements Runnable{
     private String deviceType;
     private String filename;
     private String mappings;
+    private String deviceId;
     private String code = "40020";
 
 
-    public FileLazyTask(long batchId, String path, String deviceType, String filename, String mappings) {
+    public FileLazyTask(long batchId, String path, String deviceType, String filename, String mappings, String deviceId) {
         this.batchId = batchId;
         this.path = path;
         this.deviceType = deviceType;
         this.filename = filename;
         this.mappings = mappings;
-
+        this.deviceId = deviceId;
     }
 
     @Override
     public void run() {
         try {
             logger.debug("开始上传文件到hdfs");
-            FileUtils.uploadFile(path, deviceType, batchId, filename, mappings);
+            FileUtils.uploadFile(path, deviceType, batchId, filename, mappings, deviceId);
             code = "40021";
             logger.debug("成功！");
         } catch (Exception e) {
@@ -88,11 +88,16 @@ public class FileLazyTask implements Runnable{
         return code;
     }
 
+    public String getDeviceId() {
+        return deviceId;
+    }
 
     @Override
     public String toString() {
         return "batchId:" + getBatchId() + "\npath: " + getPath() + "\ndeviceType = "
-                + getDeviceType() + "\nfilename = " + getFilename() + "\nmappings = " + getMappings() + "\ncode = " + getCode();
+                + getDeviceType() + "\nfilename = " + getFilename() + "\nmappings = " + getMappings()
+                + "\ncode = " + getCode() + "\ndeviceId = " + getDeviceId();
+
     }
 
 }

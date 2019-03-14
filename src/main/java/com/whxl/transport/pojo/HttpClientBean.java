@@ -19,7 +19,7 @@ public class HttpClientBean {
 
     @Bean
     public ExecutorService getExecutorService() {
-        return new ThreadPoolExecutor(4, 4, 0L,
+        return new ThreadPoolExecutor(1, 4, 60L,
                 TimeUnit.SECONDS, new LinkedBlockingDeque<>(1024));
     }
 }

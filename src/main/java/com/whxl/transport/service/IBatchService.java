@@ -13,4 +13,7 @@ public interface IBatchService {
                     String comments);
 
     List<BatchInfo> selectBatchInfos();
+
+    String deleteBatch(Long batchId);
+
 }
